@@ -6,7 +6,7 @@ import org.apache.kafka.streams.kstream.KStream;
 import java.util.Properties;
 
 public class KStreamBuilder extends org.apache.kafka.streams.kstream.KStreamBuilder{
-    public KStream<SchemaAndValue, SchemaAndValue> connectSource(Properties connectorProps) {
+    public KStream<SchemaAndValue, SchemaAndValue> stream(Properties connectorProps) {
         return null;
     }
 }

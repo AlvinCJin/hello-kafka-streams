@@ -94,9 +94,8 @@ public class WikipediaStreamDemo {
         connectorProps.put(IRCFeedConnector.IRC_HOST_CONFIG, "irc.wikimedia.org");
         connectorProps.put(IRCFeedConnector.IRC_PORT_CONFIG, "6667");
         connectorProps.put(IRCFeedConnector.IRC_CHANNELS_CONFIG, "#en.wikipedia,#en.wiktionary,#en.wikinews");
-        connectorProps.put(IRCFeedConnector.TOPIC_CONFIG, "wikipedia-raw");
 
-        KStream<SchemaAndValue, SchemaAndValue> wikipediaRaw = builder.connectSource(connectorProps);
+        KStream<SchemaAndValue, SchemaAndValue> wikipediaRaw = builder.stream(connectorProps);
 
         KStream<String, WikipediaMessage> wikipediaParsed =
                 wikipediaRaw.map(WikipediaMessage::parseIRCFromSource)
