@@ -23,7 +23,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.connect.api.ConnectEmbeddedSource;
+import org.apache.kafka.connect.api.EmbeddedConnectSource;
 import org.apache.kafka.connect.json.JsonDeserializer;
 import org.apache.kafka.connect.json.JsonSerializer;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
@@ -83,7 +83,7 @@ public class WikipediaStreamDemo {
 
     }
 
-    private static ConnectEmbeddedSource createConnectSource(String bootstrapServers) {
+    private static EmbeddedConnectSource createConnectSource(String bootstrapServers) {
         Properties workerProps = new Properties();
         workerProps.put(DistributedConfig.GROUP_ID_CONFIG, "wikipedia-connect");
         workerProps.put(DistributedConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -109,7 +109,7 @@ public class WikipediaStreamDemo {
         connectorProps.put(IRCFeedConnector.IRC_CHANNELS_CONFIG, "#en.wikipedia,#en.wiktionary,#en.wikinews");
         connectorProps.put(IRCFeedConnector.TOPIC_CONFIG, "wikipedia-raw");
 
-        return new ConnectEmbeddedSource(workerProps, connectorProps);
+        return new EmbeddedConnectSource(workerProps, connectorProps);
 
     }
 
@@ -123,9 +123,9 @@ public class WikipediaStreamDemo {
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "wikipedia-streams");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
-        ConnectEmbeddedSource connectSource = createConnectSource(bootstrapServers);
+        EmbeddedConnectSource connectSource = createConnectSource(bootstrapServers);
 
-        KStream<JsonNode, JsonNode> wikipediaRaw = builder.connectSource(jsonSerde, jsonSerde, connectSource);
+        KStream<JsonNode, JsonNode> wikipediaRaw = builder.stream(jsonSerde, jsonSerde, connectSource);
 
         KStream<String, WikipediaMessage> wikipediaParsed =
                 wikipediaRaw.map(WikipediaMessage::parceIRC)
