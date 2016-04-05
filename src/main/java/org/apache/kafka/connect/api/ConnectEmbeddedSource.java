@@ -45,8 +45,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * This is only a temporary extension to Kafka Connect runtime until there is an Embedded API as per KIP-26
  */
 
-public class ConnectEmbedded {
-    private static final Logger log = LoggerFactory.getLogger(ConnectEmbedded.class);
+public class ConnectEmbeddedSource {
+    private static final Logger log = LoggerFactory.getLogger(ConnectEmbeddedSource.class);
     private static final int REQUEST_TIMEOUT_MS = 120000;
 
     private final Worker worker;
@@ -58,7 +58,7 @@ public class ConnectEmbedded {
     private final ShutdownHook shutdownHook;
     private final Properties[] connectorConfigs;
 
-    public ConnectEmbedded(Properties workerConfig, Properties... connectorConfigs) throws Exception {
+    public ConnectEmbeddedSource(Properties workerConfig, Properties... connectorConfigs) {
         Time time = new SystemTime();
         DistributedConfig config = new DistributedConfig(Utils.propsToStringMap(workerConfig));
 
@@ -81,13 +81,13 @@ public class ConnectEmbedded {
 
     public void start() {
         try {
-            log.info("Kafka ConnectEmbedded starting");
+            log.info("Kafka ConnectEmbeddedSource starting");
             Runtime.getRuntime().addShutdownHook(shutdownHook);
 
             worker.start();
             herder.start();
 
-            log.info("Kafka ConnectEmbedded started");
+            log.info("Kafka ConnectEmbeddedSource started");
 
             for (Properties connectorConfig : connectorConfigs) {
                 FutureCallback<Herder.Created<ConnectorInfo>> cb = new FutureCallback<>();
@@ -112,11 +112,11 @@ public class ConnectEmbedded {
             boolean wasShuttingDown = shutdown.getAndSet(true);
             if (!wasShuttingDown) {
 
-                log.info("Kafka ConnectEmbedded stopping");
+                log.info("Kafka ConnectEmbeddedSource stopping");
                 herder.stop();
                 worker.stop();
 
-                log.info("Kafka ConnectEmbedded stopped");
+                log.info("Kafka ConnectEmbeddedSource stopped");
             }
         } finally {
             stopLatch.countDown();
@@ -136,7 +136,7 @@ public class ConnectEmbedded {
         public void run() {
             try {
                 startLatch.await();
-                ConnectEmbedded.this.stop();
+                ConnectEmbeddedSource.this.stop();
             } catch (InterruptedException e) {
                 log.error("Interrupted in shutdown hook while waiting for Kafka Connect startup to finish");
             }

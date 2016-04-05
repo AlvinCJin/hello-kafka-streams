@@ -23,7 +23,7 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.connect.api.ConnectEmbedded;
+import org.apache.kafka.connect.api.ConnectEmbeddedSource;
 import org.apache.kafka.connect.json.JsonDeserializer;
 import org.apache.kafka.connect.json.JsonSerializer;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
@@ -31,7 +31,7 @@ import org.apache.kafka.connect.runtime.distributed.DistributedConfig;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KStreamBuilder;
+import org.apache.kafka.connect.api.KStreamBuilder;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.slf4j.Logger;
@@ -64,36 +64,26 @@ public class WikipediaStreamDemo {
 
         final String bootstrapServers = args.length == 1 ? args[0] : DEFAULT_BOOTSTRAP_SERVERS;
 
-        //1. Launch Embedded Connect Instance for ingesting Wikipedia IRC feed into wikipedia-raw topic
-        ConnectEmbedded connect = createWikipediaFeedConnectInstance(bootstrapServers);
-        connect.start();
-
-        //2. Launch Kafka Streams Topology
         KafkaStreams streams = createWikipediaStreamsInstance(bootstrapServers);
         try {
             streams.start();
+
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    streams.close();
+                }
+            });
+
+            while(true) Thread.sleep(1000);
         } catch (Throwable e) {
             log.error("Stopping the application due to streams initialization error ", e);
-            connect.stop();
         }
-        
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                connect.stop();
-            }
-        });
 
-        try {
-            connect.awaitStop();
-            log.info("Connect closed cleanly...");
-        } finally {
-            streams.close();
-            log.info("Streams closed cleanly...");
-        }
+
     }
 
-    private static ConnectEmbedded createWikipediaFeedConnectInstance(String bootstrapServers) throws Exception {
+    private static ConnectEmbeddedSource createConnectSource(String bootstrapServers) {
         Properties workerProps = new Properties();
         workerProps.put(DistributedConfig.GROUP_ID_CONFIG, "wikipedia-connect");
         workerProps.put(DistributedConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
@@ -119,7 +109,7 @@ public class WikipediaStreamDemo {
         connectorProps.put(IRCFeedConnector.IRC_CHANNELS_CONFIG, "#en.wikipedia,#en.wiktionary,#en.wikinews");
         connectorProps.put(IRCFeedConnector.TOPIC_CONFIG, "wikipedia-raw");
 
-        return new ConnectEmbedded(workerProps, connectorProps);
+        return new ConnectEmbeddedSource(workerProps, connectorProps);
 
     }
 
@@ -133,8 +123,9 @@ public class WikipediaStreamDemo {
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "wikipedia-streams");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
+        ConnectEmbeddedSource connectSource = createConnectSource(bootstrapServers);
 
-        KStream<JsonNode, JsonNode> wikipediaRaw = builder.stream(jsonSerde, jsonSerde, "wikipedia-raw");
+        KStream<JsonNode, JsonNode> wikipediaRaw = builder.connectSource(jsonSerde, jsonSerde, connectSource);
 
         KStream<String, WikipediaMessage> wikipediaParsed =
                 wikipediaRaw.map(WikipediaMessage::parceIRC)
