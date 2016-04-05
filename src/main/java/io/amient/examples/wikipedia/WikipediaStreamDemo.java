@@ -23,15 +23,14 @@ import org.apache.kafka.common.serialization.Deserializer;
 import org.apache.kafka.common.serialization.Serde;
 import org.apache.kafka.common.serialization.Serdes;
 import org.apache.kafka.common.serialization.Serializer;
-import org.apache.kafka.connect.api.ConnectEmbedded;
+import org.apache.kafka.connect.data.SchemaAndValue;
 import org.apache.kafka.connect.json.JsonDeserializer;
 import org.apache.kafka.connect.json.JsonSerializer;
 import org.apache.kafka.connect.runtime.ConnectorConfig;
-import org.apache.kafka.connect.runtime.distributed.DistributedConfig;
 import org.apache.kafka.streams.KafkaStreams;
 import org.apache.kafka.streams.StreamsConfig;
 import org.apache.kafka.streams.kstream.KStream;
-import org.apache.kafka.streams.kstream.KStreamBuilder;
+import org.apache.kafka.connect.api.KStreamBuilder;
 import org.apache.kafka.streams.kstream.KTable;
 import org.apache.kafka.streams.processor.AbstractProcessor;
 import org.slf4j.Logger;
@@ -45,8 +44,7 @@ import java.util.Properties;
  *
  * The pipeline consisting of 3 components which are roughly equivalents of all hello-samza tasks.
  *
- * 1.   Wikipedia Feed - Kafka Connect Embedded implementation for connecting external data and publishing them into
- * kafka topic `wikipdia-raw`. Creates maximum 3 tasks defined by the 3 channels subscribed.
+ * 1.   Wikipedia Feed - Kafka Connect Source Stream for connecting external data.
  *
  * 2.1. Wikipedia Edit Parser - KStream-KStream mapper which parses incoming `wikipedia-raw` messages, parses them and
  * publishes the result into `wikipedia-parsed` record stream. Published messages are formatted as json.
@@ -64,63 +62,19 @@ public class WikipediaStreamDemo {
 
         final String bootstrapServers = args.length == 1 ? args[0] : DEFAULT_BOOTSTRAP_SERVERS;
 
-        //1. Launch Embedded Connect Instance for ingesting Wikipedia IRC feed into wikipedia-raw topic
-        ConnectEmbedded connect = createWikipediaFeedConnectInstance(bootstrapServers);
-        connect.start();
-
-        //2. Launch Kafka Streams Topology
         KafkaStreams streams = createWikipediaStreamsInstance(bootstrapServers);
         try {
             streams.start();
+            Runtime.getRuntime().addShutdownHook(new Thread() {
+                @Override
+                public void run() {
+                    streams.close();
+                }
+            });
+            while (true) Thread.sleep(1000);
         } catch (Throwable e) {
             log.error("Stopping the application due to streams initialization error ", e);
-            connect.stop();
         }
-        
-        Runtime.getRuntime().addShutdownHook(new Thread() {
-            @Override
-            public void run() {
-                connect.stop();
-            }
-        });
-
-        try {
-            connect.awaitStop();
-            log.info("Connect closed cleanly...");
-        } finally {
-            streams.close();
-            log.info("Streams closed cleanly...");
-        }
-    }
-
-    private static ConnectEmbedded createWikipediaFeedConnectInstance(String bootstrapServers) throws Exception {
-        Properties workerProps = new Properties();
-        workerProps.put(DistributedConfig.GROUP_ID_CONFIG, "wikipedia-connect");
-        workerProps.put(DistributedConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
-        workerProps.put(DistributedConfig.OFFSET_STORAGE_TOPIC_CONFIG, "connect-offsets");
-        workerProps.put(DistributedConfig.CONFIG_TOPIC_CONFIG, "connect-configs");
-        workerProps.put(DistributedConfig.STATUS_STORAGE_TOPIC_CONFIG, "connect-status");
-        workerProps.put(DistributedConfig.KEY_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
-        workerProps.put("key.converter.schemas.enable", "false");
-        workerProps.put(DistributedConfig.VALUE_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
-        workerProps.put("value.converter.schemas.enable", "false");
-        workerProps.put(DistributedConfig.OFFSET_COMMIT_INTERVAL_MS_CONFIG, "30000");
-        workerProps.put(DistributedConfig.INTERNAL_KEY_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
-        workerProps.put("internal.key.converter.schemas.enable", "false");
-        workerProps.put(DistributedConfig.INTERNAL_VALUE_CONVERTER_CLASS_CONFIG, "org.apache.kafka.connect.json.JsonConverter");
-        workerProps.put("internal.value.converter.schemas.enable", "false");
-
-        Properties connectorProps = new Properties();
-        connectorProps.put(ConnectorConfig.NAME_CONFIG, "wikipedia-irc-source");
-        connectorProps.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, "io.amient.kafka.connect.irc.IRCFeedConnector");
-        connectorProps.put(ConnectorConfig.TASKS_MAX_CONFIG, "10");
-        connectorProps.put(IRCFeedConnector.IRC_HOST_CONFIG, "irc.wikimedia.org");
-        connectorProps.put(IRCFeedConnector.IRC_PORT_CONFIG, "6667");
-        connectorProps.put(IRCFeedConnector.IRC_CHANNELS_CONFIG, "#en.wikipedia,#en.wiktionary,#en.wikinews");
-        connectorProps.put(IRCFeedConnector.TOPIC_CONFIG, "wikipedia-raw");
-
-        return new ConnectEmbedded(workerProps, connectorProps);
-
     }
 
     private static KafkaStreams createWikipediaStreamsInstance(String bootstrapServers) {
@@ -133,11 +87,19 @@ public class WikipediaStreamDemo {
         props.put(StreamsConfig.APPLICATION_ID_CONFIG, "wikipedia-streams");
         props.put(StreamsConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
 
+        Properties connectorProps = new Properties();
+        connectorProps.put(ConnectorConfig.NAME_CONFIG, "wikipedia-irc-source");
+        connectorProps.put(ConnectorConfig.CONNECTOR_CLASS_CONFIG, "io.amient.kafka.connect.irc.IRCFeedConnector");
+        connectorProps.put(ConnectorConfig.TASKS_MAX_CONFIG, "10");
+        connectorProps.put(IRCFeedConnector.IRC_HOST_CONFIG, "irc.wikimedia.org");
+        connectorProps.put(IRCFeedConnector.IRC_PORT_CONFIG, "6667");
+        connectorProps.put(IRCFeedConnector.IRC_CHANNELS_CONFIG, "#en.wikipedia,#en.wiktionary,#en.wikinews");
+        connectorProps.put(IRCFeedConnector.TOPIC_CONFIG, "wikipedia-raw");
 
-        KStream<JsonNode, JsonNode> wikipediaRaw = builder.stream(jsonSerde, jsonSerde, "wikipedia-raw");
+        KStream<SchemaAndValue, SchemaAndValue> wikipediaRaw = builder.connectSource(connectorProps);
 
         KStream<String, WikipediaMessage> wikipediaParsed =
-                wikipediaRaw.map(WikipediaMessage::parceIRC)
+                wikipediaRaw.map(WikipediaMessage::parseIRCFromSource)
                         .filter(WikipediaMessage::filterNonNull)
                         .through(Serdes.String(), new JsonPOJOSerde<>(WikipediaMessage.class), "wikipedia-parsed");
 

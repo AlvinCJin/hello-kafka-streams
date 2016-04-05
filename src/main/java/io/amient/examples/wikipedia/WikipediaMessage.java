@@ -18,6 +18,9 @@
 package io.amient.examples.wikipedia;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.kafka.connect.data.SchemaAndValue;
+import org.apache.kafka.connect.data.Struct;
+import org.apache.kafka.connect.source.SourceRecord;
 import org.apache.kafka.streams.KeyValue;
 
 import java.util.regex.Matcher;
@@ -53,9 +56,9 @@ public class WikipediaMessage {
                 , flagString, type, user, summary, title, byteDiff, diffUrl);
     }
 
-    public static KeyValue<String, WikipediaMessage> parceIRC(JsonNode time, JsonNode jsonIRCMessage) {
+    public static KeyValue<String, WikipediaMessage> parseIRCFromSource(SchemaAndValue key, SchemaAndValue value) {
         try {
-            WikipediaMessage edit = WikipediaMessage.parseText(jsonIRCMessage.get("message").textValue());
+            WikipediaMessage edit = parseText(((Struct) value.value()).getString("message"));
             return new KeyValue<>(edit.user, edit);
         } catch (IllegalArgumentException e) {
             return new KeyValue<>(null, null);
