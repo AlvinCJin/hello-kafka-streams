@@ -20,6 +20,8 @@ this is only due to "tech.preview" nature of their alpha1 release. The `gradle.p
 assumes you have Confluent Platform version 2.1.0-alpha1 installed in `/opt/confluent-2.1.0-alpha1`, change the `flatDirs` 
 repository property if otherwise.
 
+NOTE: IF YOU ARE USING WINDOWS OS USE `.bat` VERSIONS OF THE SCRIPTS BELOW WHICH CAN BE FOUND IN `./bin/windows`:  
+
     $ cd $CONFLUENT_PLATFORM_HOME
     $ ./bin/zookeeper-server-start ./etc/kafka/zookeeper.properties & 
     $ ./bin/kafka-server-start ./etc/kafka/server.properties
@@ -41,7 +43,7 @@ gradle wrapper to create executable jar.
 
 Use the following command to start an instance of the integrated demo topology.
 
-    ./build/scripts/hello-kafka-streams
+    ./build/scripts/hello-kafka-streams          # hello-kafka-streams.bat IF YOU ARE USING WINDOWS
 
 If you have created topics more than 1 partition you can run the command above again in another terminal 
 to see how the re-balance mechanism will scale both the embedded connect workers as well as the streams processors.
@@ -55,6 +57,7 @@ For inspecting the underlying intermediate topics, in yet another terminal `cd` 
 and run some console consumer commands:
 
     $ cd $KAFKA_HOME
+    $ # IF YOU ARE USING WINDOWS, USE `.bat` IN PLACE OF `.sh` FOR THE LAUNCH SCRIPTS BELLOW:
     $ ./bin/kafka-console-consumer.sh --zookeeper localhost --topic wikipedia-raw
     $ ./bin/kafka-console-consumer.sh --zookeeper localhost --topic wikipedia-parsed
 
